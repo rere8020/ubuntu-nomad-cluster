@@ -1,0 +1,25 @@
+# download from, used for creating certs
+https://api.github.com/repos/cloudflare/cfssl/releases/latest
+
+wget https://github.com/cloudflare/cfssl/releases/download/v1.5.0/cfssl_1.5.0_linux_amd64 -O cfssl
+wget https://github.com/cloudflare/cfssl/releases/download/v1.5.0/cfssljson_1.5.0_linux_amd64 -O cfssljson
+
+chmod 755 both files
+
+./cfssl version
+./cfssljson -version
+
+mkdir nomad-certs
+
+vim cfssl.json
+
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h",
+      "usages": ["signing", "key encipherment", "server auth", "client auth"]
+    } 
+  } 
+} 
+
+./cfssl print-defaults csr | ./cfssl gencert -initca - | ./cfssljson -bare nomad-ca
