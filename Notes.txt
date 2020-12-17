@@ -95,3 +95,57 @@ SECURING BROWSER WITH CERTIFICATE
 openssl pkcs12 -inkey cli-key.pem -in cli.pem -export -out cli.pfx
 
 # import certificate into browser then use https://nomad-master.example.com:4646
+
+ENABLE ACL
+# on all nodes 
+# add to /etc/nomad.d/nomad.hcl 
+acl {
+    enabled = true
+}
+
+# on all nodes 
+systemctl restart nomad.service
+
+# on master nodes 
+nomad acl bootstrap
+from this command copy the output into a file you will need Secret ID
+
+# you will now be in anonymous profile which has no access
+
+# in your bashrc file create another variable
+export NOMAD_TOKEN="paste Secret ID from nomad acl bootstrap"
+source .bashrc 
+
+# create an acl policy please see the anonymous.policy.hcl file included in this repo
+# anonymous will apply to users without a token 
+nomad acl policy apply -description "anonymous policy (full access)" anonymous anonymous.policy.hcl
+
+# view new policy
+nomad acl policy list
+
+# create a token with a name, copy output and share
+nomad acl token create -name="developer" -policy="anonymous"
+
+# edit the previous token name, need Accessor ID from token creation command 
+nomad acl token update -name="developer-all-access" <Accessor ID> 
+
+# create another management token 
+nomad acl token create -name="My management token" -type="management"
+
+# create a more restricted policy using junior-dev-policy.hcl file
+nomad acl policy apply -description="junior dev" junior-dev junior-developer-policy.hcl
+
+# create a token for a junior dev on team and save to a file 
+nomad acl token create -name="Tom Junior-Devops" -policy=developer -type=client > Tom.token
+
+# to test token 
+unset NOMAD_TOKEN
+export NOMAD_TOKEN="Tom Juniors token here"
+nomad job init junior-test.nomad 
+nomad job run junior-test.nomad 
+
+# source .bashrc to return to use admin token 
+
+
+RESOURCES:
+https://github.com/thedojoseries/nomad
