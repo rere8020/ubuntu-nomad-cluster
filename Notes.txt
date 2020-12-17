@@ -1,3 +1,19 @@
+SECURE GOSSIP COMMUNICATIONS
+# generate key
+nomad operator keygen
+
+# add key to servers .hcl file in /etc/nomad.d
+server {
+  enabled = true
+  bootstrap_expect = 1
+  encrypt = "insertKeyHere"
+}
+
+# do one server at a time then restart server
+
+
+SECURING THE NOMAD CLUSTER WITH CERTS
+
 # download from, used for creating certs
 https://api.github.com/repos/cloudflare/cfssl/releases/latest
 
@@ -5,6 +21,7 @@ wget https://github.com/cloudflare/cfssl/releases/download/v1.5.0/cfssl_1.5.0_li
 wget https://github.com/cloudflare/cfssl/releases/download/v1.5.0/cfssljson_1.5.0_linux_amd64 -O cfssljson
 
 chmod 755 both files
+and set in $PATH 
 
 ./cfssl version
 ./cfssljson -version
@@ -22,4 +39,59 @@ vim cfssl.json
   } 
 } 
 
-./cfssl print-defaults csr | ./cfssl gencert -initca - | ./cfssljson -bare nomad-ca
+cfssl print-defaults csr | cfssl gencert -initca - | cfssljson -bare nomad-ca
+
+# create server, client, cli certs
+echo '{}' | cfssl gencert -ca=nomad-ca.pem -ca-key=nomad-ca-key.pem -config=cfssl.json -hostname="server.global.nomad,example.com,localhost,127.0.0.1" -| cfssljson -bare server
+
+echo '{}' | cfssl gencert -ca=nomad-ca.pem -ca-key=nomad-ca-key.pem -config=cfssl.json -hostname="client.global.nomad,example.com,localhost,127.0.0.1" -| cfssljson -bare client
+
+echo '{}' | cfssl gencert -ca=nomad-ca.pem -ca-key=nomad-ca-key.pem -profile=client -| cfssljson -bare cli
+
+# copy server.csr, server-key.pem, server.pem to /etc/nomad.d/
+# add tls stanza
+tls {
+  http = true
+  rpc = true
+
+  ca_file = "/etc/nomad.d/nomad-ca.pem"
+  cert_file = "/etc/nomad.d/server.pem"
+  key_file = "/etc/nomad.d/server-key.pem"
+
+  verify_https_client = true
+  rpc_upgrade_mode = true
+}
+
+# copy nomad-ca.pem and all client files to client's /etc/nomad.d
+# add client tls stanza
+tls {
+  http = true
+  rpc = true
+
+  ca_file = "/etc/nomad.d/nomad-ca.pem"
+  cert_file = "/etc/nomad.d/client.pem"
+  key_file = "/etc/nomad.d/client-key.pem"
+
+  verify_https_client = true
+}
+
+# restart nomad server and clients
+
+# add cli cert
+nomad server members -ca-cert=nomad-ca.pem -client-cert=cli.pem -client-key=cli-key.pem -address=https://127.0.0.1:4646
+
+# to make above permanent, add to bashrc file
+export NOMAD_ADDR=https://localhost:4646
+export NOMAD_CACERT=~/nomad-certs/nomad-ca.pem
+export NOMAD_CLIENT_CERT=~/nomad-certs/cli.pem
+export NOMAD_CLIENT_KEY=~/nomad-certs/cli-key.pem
+
+# test connection
+nomad server members
+
+SECURING BROWSER WITH CERTIFICATE
+
+# generate cert
+openssl pkcs12 -inkey cli-key.pem -in cli.pem -export -out cli.pfx
+
+# import certificate into browser then use https://nomad-master.example.com:4646
